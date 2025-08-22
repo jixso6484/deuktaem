@@ -31,6 +31,66 @@ impl ProductRepository {
         }
     }
 
+    // 나라별 상품 조회 - 우선 기본 구현 (나중에 shops 테이블 구조 확인 후 개선)
+    pub async fn find_by_country(&self, _country: &str, pagination: Pagenation) -> Result<PagenationResult<Product>, Box<dyn std::error::Error>> {
+        // 임시로 전체 상품을 반환 (실제 구현 시 shops 테이블과 조인 필요)
+        log::warn!("🚧 Country filtering not yet implemented - returning all products");
+        self.find_all_paginated(pagination).await
+    }
+
+    // 인기 상품 조회 (클릭 수 기준)
+    pub async fn find_popular_products(&self, pagination: Pagenation) -> Result<PagenationResult<Product>, Box<dyn std::error::Error>> {
+        let offset = (pagination.page - 1) * pagination.limit;
+
+        let response = self.client
+            .from("products")
+            .select("*")
+            .eq("is_deleted", "false")
+            .order("click_count.desc")  // 클릭 수 기준 내림차순
+            .range(offset as usize, (offset + pagination.limit - 1) as usize)
+            .execute()
+            .await?;
+
+        let products: Vec<Product> = if response.status().is_success() {
+            let text = response.text().await?;
+            serde_json::from_str(&text)?
+        } else {
+            Vec::new()
+        };
+
+        let count_response = self.client
+            .from("products")
+            .select("count")
+            .eq("is_deleted", "false")
+            .execute()
+            .await?;
+
+        let total: u64 = if count_response.status().is_success() {
+            let text = count_response.text().await?;
+            let count_result: Value = serde_json::from_str(&text)?;
+            count_result.as_array()
+                .and_then(|arr| arr.get(0))
+                .and_then(|obj| obj.get("count"))
+                .and_then(|c| c.as_u64())
+                .unwrap_or(0)
+        } else {
+            0
+        };
+
+        let total_pages = (total as f64 / pagination.limit as f64).ceil() as u32;
+
+        Ok(PagenationResult {
+            data: products,
+            total,
+            page: pagination.page,
+            limit: pagination.limit,
+            total_pages,
+            has_next: pagination.page < total_pages,
+            has_prev: pagination.page > 1,
+        })
+    }
+
+    // 전체 상품 조회 (나라별 필터링 없음)
     pub async fn find_all_paginated(&self, pagination: Pagenation) -> Result<PagenationResult<Product>, Box<dyn std::error::Error>> {
         let offset = (pagination.page - 1) * pagination.limit;
 

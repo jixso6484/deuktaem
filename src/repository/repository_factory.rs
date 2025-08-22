@@ -1,6 +1,6 @@
 use crate::config::SupabaseConfig;
 use crate::repository::{
-    DiscountRepository, ShopRepository, ProductRepository
+    DiscountRepository, ShopRepository, ProductRepository, UserRepository
 };
 
 #[derive(Clone)]
@@ -24,6 +24,11 @@ impl RepositoryFactory {
 
     pub fn public_product_repo(&self) -> ProductRepository {
         ProductRepository::new(self.config.public_client())
+    }
+
+    // 인증된 사용자용 Repository들 (RLS 적용, user token 사용)
+    pub fn authenticated_user_repo(&self, user_token: &str) -> UserRepository {
+        UserRepository::new(self.config.authenticated_client(user_token))
     }
 }
 

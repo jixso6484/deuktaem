@@ -9,7 +9,7 @@ mod error;
 mod auth;
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     response::Json,
     routing::{get, post},
     Router,
@@ -23,17 +23,27 @@ use tower_http::{
 };
 
 use crate::config::SupabaseConfig;
-use crate::service::{DiscountService, ShopService, ProductService};
-use crate::domain::dto::HealthResponse;
+use crate::service::{DiscountService, ShopService, ProductService, UserService};
+use crate::domain::dto::{HealthResponse, pagenation::Pagenation};
 use crate::utils::init_logger;
 use crate::error::{AppError, AppResult};
+use serde::Deserialize;
 
-// 애플리케이션 상태 - Phase 1에서는 기본 서비스만 사용
+// 상품 목록 조회를 위한 쿼리 파라미터
+#[derive(Debug, Deserialize)]
+pub struct ProductQuery {
+    pub page: Option<u32>,
+    pub limit: Option<u32>,
+    pub country: Option<String>,
+}
+
+// 애플리케이션 상태 - Phase 1-2: 기본 서비스 + 구독 시스템
 #[derive(Clone)]
 pub struct AppState {
     pub discount_service: DiscountService,
     pub shop_service: ShopService,
     pub product_service: ProductService,
+    pub user_service: UserService,
 }
 
 #[tokio::main]
@@ -49,11 +59,12 @@ async fn main() {
     let config = SupabaseConfig::new().expect("Failed to load Supabase config");
     tracing::info!("⚙️ Configuration loaded");
     
-    // 서비스 초기화 - Phase 1 기본 서비스만
+    // 서비스 초기화 - Phase 1-2: 기본 서비스 + 구독 시스템
     let app_state = AppState {
         discount_service: DiscountService::new(config.clone()),
         shop_service: ShopService::new(config.clone()),
-        product_service: ProductService::new(config),
+        product_service: ProductService::new(config.clone()),
+        user_service: UserService::new(config),
     };
     
     tracing::info!("🔧 Services initialized");
@@ -75,14 +86,29 @@ fn create_router(state: Arc<AppState>) -> Router {
         .route("/health", get(health_check))
         
         // 📦 Phase 1: 상품 관리 API (기본)
-        .route("/api/v1/products/:id", get(get_product_by_id))
-        .route("/api/v1/products/:id/click", post(record_product_click))
+        .route("/api/v1/products", get(get_products))           // 상품 목록 (나라별/전체)
+        .route("/api/v1/products/popular", get(get_popular_products)) // 인기 상품 목록
+        .route("/api/v1/products/:id", get(get_product_by_id))   // 상품 상세
+        .route("/api/v1/products/:id/click", post(record_product_click)) // 클릭 기록
         
         // 💰 Phase 1: 할인 정보 API (기본)  
         .route("/api/v1/discounts/:id", get(get_discount_by_id))
         
         // 🏪 Phase 1: 매장 정보 API (기본)
         .route("/api/v1/shops/:id", get(get_shop_by_id))
+        
+        // 👥 Phase 2: 사용자 프로필 API
+        .route("/api/v1/profiles/:user_id", get(get_user_profile))
+        .route("/api/v1/profiles/:user_id", post(update_user_profile))
+        
+        // 📋 Phase 2: 구독 관리 API
+        .route("/api/v1/subscriptions/my/:user_id", get(get_my_subscriptions))
+        .route("/api/v1/subscriptions/products/:user_id/:product_id", post(add_product_subscription))
+        .route("/api/v1/subscriptions/products/:user_id/:product_id", delete(remove_product_subscription))
+        .route("/api/v1/subscriptions/brands/:user_id/:brand_id", post(add_brand_subscription))
+        .route("/api/v1/subscriptions/brands/:user_id/:brand_id", delete(remove_brand_subscription))
+        .route("/api/v1/subscriptions/shops/:user_id/:shop_id", post(add_shop_subscription))
+        .route("/api/v1/subscriptions/shops/:user_id/:shop_id", delete(remove_shop_subscription))
         
         .layer(
             ServiceBuilder::new()
@@ -105,6 +131,81 @@ async fn health_check() -> Json<HealthResponse> {
 }
 
 // 📦 Phase 1: 상품 핸들러들
+
+// 상품 목록 조회 (나라별 필터링 또는 전체)
+async fn get_products(
+    Query(query): Query<ProductQuery>,
+    State(state): State<Arc<AppState>>,
+) -> AppResult<Json<serde_json::Value>> {
+    let page = query.page.unwrap_or(1);
+    let limit = query.limit.unwrap_or(20);
+    
+    if page == 0 || limit == 0 || limit > 100 {
+        return Err(AppError::validation("Invalid page or limit parameters"));
+    }
+
+    let pagination = Pagenation { page, limit };
+
+    let result = if let Some(country) = query.country {
+        log::info!("🌍 Getting products for country: {}", country);
+        state.product_service
+            .get_products_by_country(&country, pagination)
+            .await
+            .map_err(|e| AppError::internal(format!("Failed to get products by country: {}", e)))?
+    } else {
+        log::info!("📦 Getting all products");
+        state.product_service
+            .get_all_products(pagination)
+            .await
+            .map_err(|e| AppError::internal(format!("Failed to get products: {}", e)))?
+    };
+
+    Ok(Json(json!({ 
+        "products": result.data,
+        "pagination": {
+            "page": result.page,
+            "limit": result.limit,
+            "total": result.total,
+            "total_pages": result.total_pages,
+            "has_next": result.has_next,
+            "has_prev": result.has_prev
+        }
+    })))
+}
+
+// 인기 상품 목록 조회 (클릭 수 기준)
+async fn get_popular_products(
+    Query(query): Query<ProductQuery>,
+    State(state): State<Arc<AppState>>,
+) -> AppResult<Json<serde_json::Value>> {
+    let page = query.page.unwrap_or(1);
+    let limit = query.limit.unwrap_or(20);
+    
+    if page == 0 || limit == 0 || limit > 100 {
+        return Err(AppError::validation("Invalid page or limit parameters"));
+    }
+
+    let pagination = Pagenation { page, limit };
+
+    log::info!("🔥 Getting popular products");
+    let result = state.product_service
+        .get_popular_products(pagination)
+        .await
+        .map_err(|e| AppError::internal(format!("Failed to get popular products: {}", e)))?;
+
+    Ok(Json(json!({ 
+        "products": result.data,
+        "pagination": {
+            "page": result.page,
+            "limit": result.limit,
+            "total": result.total,
+            "total_pages": result.total_pages,
+            "has_next": result.has_next,
+            "has_prev": result.has_prev
+        }
+    })))
+}
+
 async fn get_product_by_id(
     Path(product_id): Path<i64>,
     State(state): State<Arc<AppState>>,
