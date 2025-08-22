@@ -1,0 +1,41 @@
+{
+    // rust-analyzer 설정
+    "rust-analyzer.inlayHints.enable": true,
+    "rust-analyzer.inlayHints.typeHints.enable": true,
+    "rust-analyzer.inlayHints.parameterHints.enable": true,
+    "rust-analyzer.procMacro.enable": true,
+    "rust-analyzer.cargo.loadOutDirsFromCheck": true,
+    "rust-analyzer.assist.importGranularity": "module",
+    "rust-analyzer.assist.importPrefix": "self",
+    
+    // 자동완성 개선
+    "editor.suggestSelection": "first",
+    "editor.suggest.showMethods": true,
+    "editor.suggest.preview": true,
+    "editor.suggest.insertMode": "replace",
+    "editor.quickSuggestions": {
+        "other": true,
+        "comments": false,
+        "strings": true
+    },
+    "editor.parameterHints.enabled": true,
+    "editor.inlineSuggest.enabled": true,
+    
+    // 포맷팅
+    "editor.formatOnSave": true,
+    "[rust]": {
+        "editor.defaultFormatter": "rust-lang.rust-analyzer",
+        "editor.formatOnSave": true
+    },
+    
+    // 타입 힌트
+    "rust-analyzer.inlayHints.chainingHints.enable": true,
+    "rust-analyzer.inlayHints.closureReturnTypeHints.enable": "always",
+    "rust-analyzer.completion.autoimport.enable": true,
+    "rust-analyzer.completion.autoself.enable": true,
+    
+    // 추가 기능
+    "rust-analyzer.hover.actions.enable": true,
+    "rust-analyzer.lens.enable": true,
+    "rust-analyzer.diagnostics.enable": true
+}

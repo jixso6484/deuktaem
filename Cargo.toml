@@ -1,0 +1,56 @@
+[package]
+name = "Duk"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# 비동기 런타임
+tokio = { version = "1", features = ["full"] }
+
+# 웹 프레임워크
+axum = "0.7"
+
+# HTTP 클라이언트 (크롤링용)
+reqwest = { version = "0.11", features = ["cookies", "gzip", "json"] }
+
+# HTML 파싱
+scraper = "0.18"
+
+# 직렬화
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+
+# 기타 유틸리티
+anyhow = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+
+# Supabase / Database
+postgrest = "1.6"
+dotenv = "0.15"
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres"] }
+
+# Realtime / WebSocket
+tokio-tungstenite = { version = "0.21", features = ["native-tls"] }
+futures-util = "0.3"
+
+# Async traits
+async-trait = "0.1"
+
+# UUID (도메인 모델용)
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# 로깅
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+log = "0.4"
+
+# HTTP 미들웨어
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+# Redis 캐싱 (Upstash 호환)
+redis = { version = "0.24", features = ["tokio-comp"] }
+
+# 에러 핸들링
+thiserror = "1.0"
