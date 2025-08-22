@@ -1,15 +1,9 @@
 pub mod shop_repository;
 pub mod product_repository;
 pub mod discount_repository;
-pub mod user_repository;
-pub mod translation_repository;
-pub mod notification_repository;
 pub mod repository_factory;
 
 pub use shop_repository::*;
 pub use product_repository::*;
 pub use discount_repository::*;
-pub use user_repository::*;
-pub use translation_repository::*;
-pub use notification_repository::*;
 pub use repository_factory::*;
