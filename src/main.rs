@@ -11,7 +11,7 @@ mod auth;
 use axum::{
     extract::{Path, Query, State},
     response::Json,
-    routing::{get, post},
+    routing::{delete, get, post},
     Router,
 };
 use serde_json::json;
@@ -101,7 +101,7 @@ fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/profiles/:user_id", get(get_user_profile))
         .route("/api/v1/profiles/:user_id", post(update_user_profile))
         
-        // 📋 Phase 2: 구독 관리 API
+        // 📋 Phase 2: 구독 관리 API  
         .route("/api/v1/subscriptions/my/:user_id", get(get_my_subscriptions))
         .route("/api/v1/subscriptions/products/:user_id/:product_id", post(add_product_subscription))
         .route("/api/v1/subscriptions/products/:user_id/:product_id", delete(remove_product_subscription))
@@ -275,4 +275,180 @@ async fn get_shop_by_id(
         Some(shop) => Ok(Json(json!({ "shop": shop }))),
         None => Err(AppError::not_found("Shop")),
     }
+}
+
+// 👥 Phase 2: 사용자 프로필 핸들러들
+async fn get_user_profile(
+    Path(user_id): Path<String>,
+    State(state): State<Arc<AppState>>,
+) -> AppResult<Json<serde_json::Value>> {
+    log::info!("👤 Getting user profile: {}", user_id);
+    
+    let profile = state.user_service
+        .get_profile(&user_id)
+        .await
+        .map_err(|e| AppError::internal(format!("Failed to get user profile: {}", e)))?;
+    
+    match profile {
+        Some(profile) => Ok(Json(json!({ "profile": profile }))),
+        None => Err(AppError::not_found("User profile")),
+    }
+}
+
+async fn update_user_profile(
+    Path(user_id): Path<String>,
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<serde_json::Value>,
+) -> AppResult<Json<serde_json::Value>> {
+    log::info!("👤 Updating user profile: {}", user_id);
+    
+    // Parse payload as Profile - using actual Profile fields
+    let profile = crate::domain::entities::user::Profile {
+        user_id: user_id.clone(),
+        avatar_url: payload.get("avatar_url").and_then(|v| v.as_str()).map(|s| s.to_string()),
+        email: payload.get("email").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        preferred_country: payload.get("preferred_country").and_then(|v| v.as_str()).map(|s| s.to_string()),
+        detected_country: payload.get("detected_country").and_then(|v| v.as_str()).map(|s| s.to_string()),
+        language: payload.get("language").and_then(|v| v.as_str()).map(|s| s.to_string()),
+        timezone: payload.get("timezone").and_then(|v| v.as_str()).map(|s| s.to_string()),
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
+    };
+    
+    state.user_service
+        .update_profile(profile)
+        .await
+        .map_err(|e| AppError::internal(format!("Failed to update user profile: {}", e)))?;
+    
+    Ok(Json(json!({ 
+        "success": true,
+        "message": "User profile updated successfully",
+        "user_id": user_id 
+    })))
+}
+
+// 📋 Phase 2: 구독 관리 핸들러들
+async fn get_my_subscriptions(
+    Path(user_id): Path<String>,
+    State(state): State<Arc<AppState>>,
+) -> AppResult<Json<serde_json::Value>> {
+    log::info!("📋 Getting subscriptions for user: {}", user_id);
+    
+    let subscriptions = state.user_service
+        .get_all_subscriptions(&user_id)
+        .await
+        .map_err(|e| AppError::internal(format!("Failed to get subscriptions: {}", e)))?;
+    
+    Ok(Json(json!({ "subscriptions": subscriptions })))
+}
+
+async fn add_product_subscription(
+    Path((user_id, product_id)): Path<(String, i64)>,
+    State(state): State<Arc<AppState>>,
+) -> AppResult<Json<serde_json::Value>> {
+    log::info!("📦 Adding product subscription: user={}, product={}", user_id, product_id);
+    
+    let subscription = state.user_service
+        .add_product_subscription(&user_id, product_id)
+        .await
+        .map_err(|e| AppError::internal(format!("Failed to add product subscription: {}", e)))?;
+    
+    Ok(Json(json!({ 
+        "success": true,
+        "message": "Product subscription added",
+        "subscription": subscription
+    })))
+}
+
+async fn remove_product_subscription(
+    Path((user_id, product_id)): Path<(String, i64)>,
+    State(state): State<Arc<AppState>>,
+) -> AppResult<Json<serde_json::Value>> {
+    log::info!("📦 Removing product subscription: user={}, product={}", user_id, product_id);
+    
+    state.user_service
+        .remove_product_subscription(&user_id, product_id)
+        .await
+        .map_err(|e| AppError::internal(format!("Failed to remove product subscription: {}", e)))?;
+    
+    Ok(Json(json!({ 
+        "success": true,
+        "message": "Product subscription removed",
+        "user_id": user_id,
+        "product_id": product_id
+    })))
+}
+
+async fn add_brand_subscription(
+    Path((user_id, brand_id)): Path<(String, i64)>,
+    State(state): State<Arc<AppState>>,
+) -> AppResult<Json<serde_json::Value>> {
+    log::info!("🏷️ Adding brand subscription: user={}, brand={}", user_id, brand_id);
+    
+    let subscription = state.user_service
+        .add_brand_subscription(&user_id, brand_id)
+        .await
+        .map_err(|e| AppError::internal(format!("Failed to add brand subscription: {}", e)))?;
+    
+    Ok(Json(json!({ 
+        "success": true,
+        "message": "Brand subscription added",
+        "subscription": subscription
+    })))
+}
+
+async fn remove_brand_subscription(
+    Path((user_id, brand_id)): Path<(String, i64)>,
+    State(state): State<Arc<AppState>>,
+) -> AppResult<Json<serde_json::Value>> {
+    log::info!("🏷️ Removing brand subscription: user={}, brand={}", user_id, brand_id);
+    
+    state.user_service
+        .remove_brand_subscription(&user_id, brand_id)
+        .await
+        .map_err(|e| AppError::internal(format!("Failed to remove brand subscription: {}", e)))?;
+    
+    Ok(Json(json!({ 
+        "success": true,
+        "message": "Brand subscription removed",
+        "user_id": user_id,
+        "brand_id": brand_id
+    })))
+}
+
+async fn add_shop_subscription(
+    Path((user_id, shop_id)): Path<(String, i64)>,
+    State(state): State<Arc<AppState>>,
+) -> AppResult<Json<serde_json::Value>> {
+    log::info!("🏪 Adding shop subscription: user={}, shop={}", user_id, shop_id);
+    
+    let subscription = state.user_service
+        .add_shop_subscription(&user_id, shop_id, true) // Default to notifications enabled
+        .await
+        .map_err(|e| AppError::internal(format!("Failed to add shop subscription: {}", e)))?;
+    
+    Ok(Json(json!({ 
+        "success": true,
+        "message": "Shop subscription added",
+        "subscription": subscription
+    })))
+}
+
+async fn remove_shop_subscription(
+    Path((user_id, shop_id)): Path<(String, i64)>,
+    State(state): State<Arc<AppState>>,
+) -> AppResult<Json<serde_json::Value>> {
+    log::info!("🏪 Removing shop subscription: user={}, shop={}", user_id, shop_id);
+    
+    state.user_service
+        .remove_shop_subscription(&user_id, shop_id)
+        .await
+        .map_err(|e| AppError::internal(format!("Failed to remove shop subscription: {}", e)))?;
+    
+    Ok(Json(json!({ 
+        "success": true,
+        "message": "Shop subscription removed",
+        "user_id": user_id,
+        "shop_id": shop_id
+    })))
 }

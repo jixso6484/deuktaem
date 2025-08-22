@@ -43,10 +43,10 @@ impl ProductService {
         repo.find_popular_products(pagination).await
     }
 
-    // 상품 클릭 기록 (간단한 버전)
+    // 상품 클릭 기록 - 클릭 수 증가
     pub async fn record_product_click(&self, product_id: i64) -> Result<(), Box<dyn std::error::Error>> {
-        log::info!("🖱️ 상품 클릭 기록: {}", product_id);
-        // 나중에 DB 함수 호출로 구현
-        Ok(())
+        log::info!("🖱️ Recording product click: {}", product_id);
+        let repo = self.factory.public_product_repo();
+        repo.increment_click_count(product_id).await
     }
 }
